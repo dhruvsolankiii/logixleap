@@ -1,0 +1,51 @@
+﻿Analyzing logixleap...                                          
+
+   info - Don't use 'BuildContext's across async gaps - lib\screens\admin\admin_dashboard_screen.dart:25:17 - use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\admin\admin_dashboard_screen.dart:82:43 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\admin\admin_dashboard_screen.dart:85:28 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\admin\admin_dashboard_screen.dart:97:30 - deprecated_member_use
+   info - Don't use 'BuildContext's across async gaps - lib\screens\admin\manage_plans_screen.dart:106:33 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\admin\manage_plans_screen.dart:164:33 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\admin\manage_plans_screen.dart:167:42 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\admin\manage_users_screen.dart:136:44 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\admin\manage_users_screen.dart:141:44 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\admin\manage_users_screen.dart:148:43 - use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\language_screen.dart:89:31 - deprecated_member_use
+   info - Unnecessary instance of 'Container' - lib\screens\auth\login_screen.dart:20:13 - avoid_unnecessary_containers
+   info - Don't invoke 'print' in production code - lib\screens\auth\login_screen.dart:110:23 - avoid_print
+   info - Don't use 'BuildContext's across async gaps - lib\screens\auth\login_screen.dart:125:29 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\auth\login_screen.dart:130:29 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\auth\login_screen.dart:135:46 - use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\login_screen.dart:195:72 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\login_screen.dart:197:74 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\login_screen.dart:200:42 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\login_screen.dart:200:74 - deprecated_member_use
+   info - Unnecessary instance of 'Container' - lib\screens\auth\signup_screen.dart:18:13 - avoid_unnecessary_containers
+   info - Don't invoke 'print' in production code - lib\screens\auth\signup_screen.dart:138:25 - avoid_print
+   info - Don't use 'BuildContext's across async gaps - lib\screens\auth\signup_screen.dart:142:48 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\auth\signup_screen.dart:149:29 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\auth\signup_screen.dart:155:48 - use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\signup_screen.dart:222:53 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\signup_screen.dart:227:53 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\signup_screen.dart:232:28 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\signup_screen.dart:233:28 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\investment\investment_screen.dart:107:95 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\investment\investment_screen.dart:174:47 - deprecated_member_use
+   info - Don't use 'BuildContext's across async gaps - lib\screens\investment\investment_screen.dart:396:31 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\investment\investment_screen.dart:399:19 - use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\portfolio\portfolio_screen.dart:88:95 - deprecated_member_use
+   info - Don't use 'BuildContext's across async gaps - lib\screens\portfolio\portfolio_screen.dart:319:7 - use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\profile\privacy_security_screen.dart:141:46 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\profile\privacy_security_screen.dart:177:46 - deprecated_member_use
+
+flutter : 37 issues found. (ran in 2.4s)
+At line:1 char:1
++ flutter analyze 2>&1 > analysis_output.txt; 
+Get-Content analysis_outp ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (3 
+   7 issues found. (ran in 2.4s):String) [],   
+  RemoteException
+    + FullyQualifiedErrorId : NativeCommandErr 
+   or
+ 
