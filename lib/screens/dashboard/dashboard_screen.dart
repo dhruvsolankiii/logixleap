@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 import '../../services/api_service.dart';
 import '../../services/storage_service.dart';
-import 'package:skeletonizer/skeletonizer.dart';
+import '../../services/theme_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
-
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic>? portfolioData;
-  String userName = "";
+  String userName = '';
 
   @override
   void initState() {
@@ -20,223 +20,197 @@ class _DashboardScreenState extends State<DashboardScreen> {
     loadData();
   }
 
-  Future loadData() async {
-    String? userId = await StorageService.getUserId();
-    String? name = await StorageService.getName();
-
-    var data = await ApiService.getPortfolio(userId!);
-
+  Future<void> loadData() async {
+    final userId = await StorageService.getUserId();
+    final name = await StorageService.getName();
+    if (userId == null) return;
+    final data = await ApiService.getPortfolio(userId);
+    if (!mounted) return;
     setState(() {
-      portfolioData = data;
-      userName = name ?? "User";
+      portfolioData = data['error'] == true ? <String, dynamic>{} : data;
+      userName = name ?? 'User';
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    
+    final data = portfolioData;
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-
-      body: portfolioData == null
-          ? Skeletonizer(
-              enabled: true,
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: ListView(
-                    children: [
-                      Text("Welcome User", style: TextStyle(color: theme.textTheme.bodyLarge?.color, fontSize: 22, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 20),
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF1E88E5), Color(0xFF42A5F5)]), borderRadius: BorderRadius.circular(16)),
-                        child: const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text("Virtual Balance", style: TextStyle(color: Colors.white70, fontSize: 16)),
-                            SizedBox(height: 10),
-                            Text("₹0", style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 30),
-                      Row(
-                        children: [
-                          Expanded(child: buildSummaryCard(context: context, title: "Total Invested", value: "₹0")),
-                          const SizedBox(width: 10),
-                          Expanded(child: buildSummaryCard(context: context, title: "Total Profit", value: "₹0")),
-                        ],
-                      ),
-                      const SizedBox(height: 30),
-                      Text("Recent Investments", style: TextStyle(color: theme.textTheme.bodyLarge?.color, fontSize: 18, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 15),
-                      Card(
-                        color: theme.cardColor,
-                        child: ListTile(
-                          title: Text("Loading Plan", style: TextStyle(color: theme.textTheme.bodyLarge?.color)),
-                          subtitle: Text("Amount ₹0", style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
-                          trailing: const Text("+₹0", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    ],
+      body: SafeArea(
+        child: Skeletonizer(
+          enabled: data == null,
+          child: ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Text(
+                'Good morning,',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                data == null ? 'User' : userName,
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 28),
+              _BalanceCard(
+                value: data == null ? '₹0' : '₹${data['virtualBalance'] ?? 0}',
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _MetricCard(
+                      title: 'Total invested',
+                      value: data == null
+                          ? '₹0'
+                          : '₹${data['totalInvested'] ?? 0}',
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _MetricCard(
+                      title: 'Total profit',
+                      value: data == null
+                          ? '₹0'
+                          : '₹${data['totalProfit'] ?? 0}',
+                      accent: AppThemes.forest,
+                    ),
+                  ),
+                ],
               ),
-            )
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-
-                child: ListView(
-                  children: [
-                    Text(
-                      "Welcome $userName",
-                      style: TextStyle(
-                        color: theme.textTheme.bodyLarge?.color,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // BALANCE CARD
-                    Container(
-                      padding: const EdgeInsets.all(20),
-
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF1E88E5), Color(0xFF42A5F5)],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Virtual Balance",
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 16,
-                            ),
-                          ),
-
-                          const SizedBox(height: 10),
-
-                          Text(
-                            "₹${portfolioData!["virtualBalance"]}",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 30),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: buildSummaryCard(
-                            context: context,
-                            title: "Total Invested",
-                            value: "₹${portfolioData!["totalInvested"]}",
-                          ),
-                        ),
-
-                        const SizedBox(width: 10),
-
-                        Expanded(
-                          child: buildSummaryCard(
-                            context: context,
-                            title: "Total Profit",
-                            value: "₹${portfolioData!["totalProfit"]}",
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 30),
-
-                    Text(
-                      "Recent Investments",
-                      style: TextStyle(
-                        color: theme.textTheme.bodyLarge?.color,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    ...portfolioData!["investments"].map<Widget>((inv) {
-                      return Card(
-                        color: theme.cardColor,
-
-                        child: ListTile(
-                          title: Text(
-                            inv["plan"],
-                            style: TextStyle(color: theme.textTheme.bodyLarge?.color),
-                          ),
-
-                          subtitle: Text(
-                            "Amount ₹${inv["amount"]}",
-                            style: TextStyle(color: theme.textTheme.bodyMedium?.color),
-                          ),
-
-                          trailing: Text(
-                            "+₹${inv["profit"]}",
-                            style: const TextStyle(
-                              color: Colors.green,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ],
-                ),
+              const SizedBox(height: 32),
+              Text(
+                'Recent investments',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-            ),
+              const SizedBox(height: 12),
+              if (data == null)
+                ...List.generate(
+                  2,
+                  (_) => const _InvestmentTile(
+                    plan: 'Loading plan',
+                    amount: '₹0',
+                    profit: '+₹0',
+                  ),
+                )
+              else if ((data['investments'] as List? ?? []).isEmpty)
+                _EmptyState(text: 'No investments yet')
+              else
+                ...((data['investments'] as List)
+                    .take(4)
+                    .map(
+                      (inv) => _InvestmentTile(
+                        plan: '${inv['plan'] ?? 'Investment'}',
+                        amount: '₹${inv['amount'] ?? 0}',
+                        profit: '+₹${inv['profit'] ?? 0}',
+                      ),
+                    )),
+            ],
+          ),
+        ),
+      ),
     );
   }
+}
 
-  Widget buildSummaryCard({required BuildContext context, required String title, required String value}) {
-    final theme = Theme.of(context);
-    
-    return Container(
-      padding: const EdgeInsets.all(16),
+class _BalanceCard extends StatelessWidget {
+  const _BalanceCard({required this.value});
+  final String value;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(24),
+    decoration: BoxDecoration(
+      color: AppThemes.forest,
+      borderRadius: BorderRadius.circular(24),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Virtual balance',
+          style: TextStyle(color: Colors.white.withValues(alpha: .75)),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 34,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 18),
+        Text(
+          'Available to invest',
+          style: TextStyle(color: Colors.white.withValues(alpha: .75)),
+        ),
+      ],
+    ),
+  );
+}
 
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: theme.brightness == Brightness.dark ? [] : [
-          const BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
-        ]
-      ),
-
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({required this.title, required this.value, this.accent});
+  final String title, value;
+  final Color? accent;
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(18),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
-
+          Text(title, style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 10),
-
           Text(
             value,
-            style: TextStyle(
-              fontSize: 18,
-              color: theme.textTheme.bodyLarge?.color,
-              fontWeight: FontWeight.bold,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(color: accent),
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
+
+class _InvestmentTile extends StatelessWidget {
+  const _InvestmentTile({
+    required this.plan,
+    required this.amount,
+    required this.profit,
+  });
+  final String plan, amount, profit;
+  @override
+  Widget build(BuildContext context) => Card(
+    margin: const EdgeInsets.only(bottom: 10),
+    child: ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 5),
+      leading: const CircleAvatar(
+        backgroundColor: AppThemes.mint,
+        child: Icon(Icons.auto_graph, color: AppThemes.forest),
+      ),
+      title: Text(plan, style: Theme.of(context).textTheme.titleMedium),
+      subtitle: Text('Amount $amount'),
+      trailing: Text(
+        profit,
+        style: const TextStyle(
+          color: AppThemes.forest,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    ),
+  );
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.text});
+  final String text;
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Center(child: Text(text)),
+    ),
+  );
 }

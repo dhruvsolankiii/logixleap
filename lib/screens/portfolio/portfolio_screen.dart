@@ -1,334 +1,170 @@
 import 'package:flutter/material.dart';
-import '../../services/api_service.dart';
-import '../../services/storage_service.dart';
-import '../../services/cache_service.dart';
 import 'package:skeletonizer/skeletonizer.dart';
+import '../../services/api_service.dart';
+import '../../services/cache_service.dart';
+import '../../services/storage_service.dart';
+import '../../services/theme_service.dart';
 
 class PortfolioScreen extends StatefulWidget {
   const PortfolioScreen({super.key});
-
   @override
   State<PortfolioScreen> createState() => _PortfolioScreenState();
 }
 
 class _PortfolioScreenState extends State<PortfolioScreen> {
-  Map<String, dynamic>? portfolioData;
-  String? errorMessage;
-  bool isOffline = false;
-
+  Map<String, dynamic>? data;
+  String? error;
+  bool offline = false;
   @override
   void initState() {
     super.initState();
     loadPortfolio();
   }
 
-  Future loadPortfolio() async {
-    setState(() {
-      errorMessage = null;
-      portfolioData = null;
-      isOffline = false;
-    });
-
-    try {
-      String? userId = await StorageService.getUserId();
-      var data = await ApiService.getPortfolio(userId!);
-
-      if (data["error"] == true) {
-        // Try loading from cache
-        await _loadFromCache();
-        return;
-      }
-
+  Future<void> loadPortfolio() async {
+    if (mounted) {
       setState(() {
-        portfolioData = data;
+        data = null;
+        error = null;
+        offline = false;
       });
-
-      // Cache portfolio data
-      await CacheService.saveCache("portfolio", data);
-    } catch (e) {
-      await _loadFromCache();
     }
-  }
-
-  Future<void> _loadFromCache() async {
-    var cached = await CacheService.getCache("portfolio");
-
-    if (cached != null) {
-      setState(() {
-        portfolioData = Map<String, dynamic>.from(cached);
-        isOffline = true;
-      });
-    } else {
-      setState(() {
-        errorMessage = "Unable to connect to server. No cached data available.";
-      });
+    try {
+      final id = await StorageService.getUserId();
+      if (id == null) throw Exception();
+      final result = await ApiService.getPortfolio(id);
+      if (result['error'] == true) throw Exception();
+      if (!mounted) return;
+      setState(() => data = result);
+      await CacheService.saveCache('portfolio', result);
+    } catch (_) {
+      final cached = await CacheService.getCache('portfolio');
+      if (!mounted) return;
+      if (cached != null) {
+        setState(() {
+          data = Map<String, dynamic>.from(cached);
+          offline = true;
+        });
+      } else {
+        setState(
+          () =>
+              error = 'Unable to connect to server. No cached data available.',
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
+    final investments = (data?['investments'] as List? ?? []);
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-
-      appBar: AppBar(
-        title: const Text("My Portfolio"),
-        backgroundColor: theme.appBarTheme.backgroundColor,
-        foregroundColor: theme.appBarTheme.foregroundColor,
-        elevation: 0,
-      ),
-
-      body: errorMessage != null
-          ? Center(
+      appBar: AppBar(title: const Text('My portfolio')),
+      body: error != null
+          ? _ErrorState(message: error!, retry: loadPortfolio)
+          : Skeletonizer(
+              enabled: data == null,
               child: Padding(
-                padding: const EdgeInsets.all(32),
+                padding: const EdgeInsets.all(24),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.cloud_off, size: 64, color: theme.textTheme.bodyMedium?.color?.withOpacity(0.5)),
-                    const SizedBox(height: 16),
-                    Text(
-                      errorMessage!,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: theme.textTheme.bodyMedium?.color, fontSize: 16),
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      onPressed: loadPortfolio,
-                      icon: const Icon(Icons.refresh, color: Colors.white),
-                      label: const Text("Retry", style: TextStyle(color: Colors.white)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1E88E5),
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : portfolioData == null
-              ? Skeletonizer(
-                  enabled: true,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
+                    if (offline) _OfflineBanner(retry: loadPortfolio),
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            Expanded(child: buildSummaryCard(context: context, title: "Total Invested", value: "₹0")),
-                            const SizedBox(width: 10),
-                            Expanded(child: buildSummaryCard(context: context, title: "Total Profit", value: "₹0")),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
                         Expanded(
-                          child: ListView.builder(
-                            itemCount: 3,
-                            itemBuilder: (context, index) {
-                              return Card(
-                                color: theme.cardColor,
-                                child: ListTile(
-                                  title: Text("Loading Plan", style: TextStyle(color: theme.textTheme.bodyLarge?.color)),
-                                  subtitle: Text("Amount: ₹0", style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Text("+₹0", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                                      const SizedBox(width: 8),
-                                      ElevatedButton(
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.redAccent,
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                                          minimumSize: const Size(60, 30),
-                                        ),
-                                        onPressed: () {},
-                                        child: const Text("Withdraw", style: TextStyle(color: Colors.white, fontSize: 12)),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
+                          child: _Metric(
+                            title: 'Total invested',
+                            value: '₹${data?['totalInvested'] ?? 0}',
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _Metric(
+                            title: 'Total profit',
+                            value: '₹${data?['totalProfit'] ?? 0}',
+                            green: true,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                )
-              : Padding(
-              padding: const EdgeInsets.all(16),
-
-              child: Column(
-                children: [
-                  // Offline Banner
-                  if (isOffline)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade800,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.cloud_off, color: Colors.white, size: 18),
-                          const SizedBox(width: 10),
-                          const Expanded(
-                            child: Text(
-                              "Showing cached data - Server offline",
-                              style: TextStyle(color: Colors.white, fontSize: 13),
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: loadPortfolio,
-                            child: const Icon(Icons.refresh, color: Colors.white, size: 20),
-                          ),
-                        ],
-                      ),
-                    ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: buildSummaryCard(
-                          context: context,
-                          title: "Total Invested",
-                          value: "₹${portfolioData!["totalInvested"]}",
-                        ),
-                      ),
-
-                      const SizedBox(width: 10),
-
-                      Expanded(
-                        child: buildSummaryCard(
-                          context: context,
-                          title: "Total Profit",
-                          value: "₹${portfolioData!["totalProfit"]}",
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  Expanded(
-                    child: ListView.builder(
-                      itemCount: portfolioData!["investments"].length,
-
-                      itemBuilder: (context, index) {
-                        var inv = portfolioData!["investments"][index];
-
-                        return Card(
-                          color: theme.cardColor,
-
-                          child: ListTile(
-                            title: Text(
-                              inv["plan"],
-                              style: TextStyle(color: theme.textTheme.bodyLarge?.color),
-                            ),
-
-                            subtitle: Text(
-                              "Amount: ₹${inv["amount"]}",
-                              style: TextStyle(color: theme.textTheme.bodyMedium?.color),
-                            ),
-
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  "+₹${inv["earnedProfit"] ?? 0}",
-                                  style: const TextStyle(
-                                    color: Colors.green,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                    const SizedBox(height: 24),
+                    Expanded(
+                      child: data == null
+                          ? ListView(
+                              children: List.generate(
+                                3,
+                                (_) => const _Holding(
+                                  plan: 'Loading plan',
+                                  amount: '₹0',
+                                  profit: '₹0',
                                 ),
-                                const SizedBox(width: 8),
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.redAccent,
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                                    minimumSize: const Size(60, 30),
+                              ),
+                            )
+                          : investments.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'Your portfolio is ready for its first investment.',
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: investments.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 10),
+                              itemBuilder: (_, index) {
+                                final inv = investments[index];
+                                return _Holding(
+                                  plan: '${inv['plan'] ?? 'Investment'}',
+                                  amount: '₹${inv['amount'] ?? 0}',
+                                  profit: '+₹${inv['earnedProfit'] ?? 0}',
+                                  onTap: () => _showProfitDetails(
+                                    Map<String, dynamic>.from(inv),
                                   ),
-                                  onPressed: () => _withdrawInvestment(inv["_id"]),
-                                  child: const Text("Withdraw", style: TextStyle(color: Colors.white, fontSize: 12)),
-                                ),
-                              ],
+                                  onWithdraw: () =>
+                                      _withdrawInvestment('${inv['_id']}'),
+                                );
+                              },
                             ),
-                            
-                            onTap: () => _showProfitDetails(inv),
-                          ),
-                        );
-                      },
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
     );
   }
 
   void _showProfitDetails(Map<String, dynamic> inv) {
-    double progressRatio = (inv["progressRatio"] ?? 0).toDouble();
-    int percentage = (progressRatio * 100).toInt();
-    final theme = Theme.of(context);
-
+    final ratio = ((inv['progressRatio'] ?? 0) as num).toDouble().clamp(
+      0.0,
+      1.0,
+    );
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: theme.cardColor,
-        title: Text(inv["plan"], style: TextStyle(color: theme.textTheme.bodyLarge?.color, fontWeight: FontWeight.bold)),
+      builder: (_) => AlertDialog(
+        title: Text('${inv['plan']}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Initial Investment: ₹${inv["amount"]}", style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
-            const SizedBox(height: 10),
-            Text("Target Profit: ₹${inv["profit"]} (${inv["roi"]}%)", style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
-            const SizedBox(height: 10),
-            Text("Duration: ${inv["duration"]}", style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
-            const SizedBox(height: 20),
-            
-            // Progress Bar
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text("Time Elapsed", style: TextStyle(color: theme.textTheme.bodyMedium?.color, fontSize: 12)),
-                    Text("$percentage%", style: TextStyle(color: theme.textTheme.bodyMedium?.color, fontSize: 12)),
-                  ],
-                ),
-                const SizedBox(height: 5),
-                LinearProgressIndicator(
-                  value: progressRatio,
-                  backgroundColor: Colors.black26,
-                  color: Colors.greenAccent,
-                  minHeight: 8,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ],
-            ),
-            
-            const SizedBox(height: 20),
-            Center(
-              child: Column(
-                children: [
-                  Text("Current Live Profit", style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
-                  Text(
-                    "+₹${inv["earnedProfit"] ?? 0}",
-                    style: const TextStyle(color: Colors.greenAccent, fontSize: 24, fontWeight: FontWeight.bold),
-                  ),
-                ],
+            Text('Initial investment: ₹${inv['amount']}'),
+            const SizedBox(height: 8),
+            Text('Target profit: ₹${inv['profit']} (${inv['roi']}%)'),
+            const SizedBox(height: 8),
+            Text('Duration: ${inv['duration']}'),
+            const SizedBox(height: 18),
+            LinearProgressIndicator(value: ratio),
+            const SizedBox(height: 12),
+            Text(
+              'Current live profit: +₹${inv['earnedProfit'] ?? 0}',
+              style: const TextStyle(
+                color: AppThemes.forest,
+                fontWeight: FontWeight.w700,
               ),
-            )
+            ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text("Close", style: TextStyle(color: theme.textTheme.bodyLarge?.color)),
+            child: const Text('Close'),
           ),
         ],
       ),
@@ -336,94 +172,180 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
   }
 
   Future<void> _withdrawInvestment(String investmentId) async {
-    final theme = Theme.of(context);
-    
-    bool confirm = await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: theme.cardColor,
-        title: Text("Withdraw Investment", style: TextStyle(color: theme.textTheme.bodyLarge?.color)),
-        content: Text("Are you sure you want to withdraw right now? If you withdraw before the plan duration is complete, your earned profit will be pro-rated based on the time elapsed so far. The initial amount plus any earned partial profit will safely return to your balance.", style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text("Cancel", style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
+    final confirm =
+        await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Withdraw investment?'),
+            content: const Text(
+              'Your initial amount and any earned partial profit will return to your balance.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Withdraw'),
+              ),
+            ],
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text("Withdraw", style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    ) ?? false;
-
+        ) ??
+        false;
     if (!confirm || !mounted) return;
-
-    String? userId = await StorageService.getUserId();
-    if (userId == null) return;
-
+    final userId = await StorageService.getUserId();
+    if (userId == null || !mounted) return;
     showDialog(
-      context: context, 
+      context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator())
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
-
     try {
-      var result = await ApiService.withdraw(investmentId, userId);
-      
+      final result = await ApiService.withdraw(investmentId, userId);
       if (!mounted) return;
-      Navigator.pop(context); // Remove loading indicator
-
-      if (result["message"] == "Withdrawal Successful") {
-         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Withdrawal successful!"), backgroundColor: Colors.green),
-        );
-        loadPortfolio(); // Refresh the portfolio data
-      } else {
-         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result["message"] ?? "Failed to withdraw"), backgroundColor: Colors.red),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context); // Remove loading indicator
+      Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to withdraw: Network Error"), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(result['message'] ?? 'Withdrawal complete'),
+          backgroundColor: result['message'] == 'Withdrawal Successful'
+              ? AppThemes.forest
+              : AppThemes.red,
+        ),
+      );
+      if (result['message'] == 'Withdrawal Successful') loadPortfolio();
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to withdraw'),
+          backgroundColor: AppThemes.red,
+        ),
       );
     }
   }
+}
 
-  Widget buildSummaryCard({required BuildContext context, required String title, required String value}) {
-    final theme = Theme.of(context);
-    
-    return Container(
-      padding: const EdgeInsets.all(16),
-
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: theme.brightness == Brightness.dark ? [] : [
-          const BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
-        ]
-      ),
-
+class _Metric extends StatelessWidget {
+  const _Metric({required this.title, required this.value, this.green = false});
+  final String title, value;
+  final bool green;
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(18),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
-
-          const SizedBox(height: 10),
-
+          Text(title),
+          const SizedBox(height: 8),
           Text(
             value,
-            style: TextStyle(
-              fontSize: 18,
-              color: theme.textTheme.bodyLarge?.color,
-              fontWeight: FontWeight.bold,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: green ? AppThemes.forest : null,
             ),
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
+
+class _Holding extends StatelessWidget {
+  const _Holding({
+    required this.plan,
+    required this.amount,
+    required this.profit,
+    this.onTap,
+    this.onWithdraw,
+  });
+  final String plan, amount, profit;
+  final VoidCallback? onTap, onWithdraw;
+  @override
+  Widget build(BuildContext context) => Card(
+    child: ListTile(
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+      leading: const CircleAvatar(
+        backgroundColor: AppThemes.mint,
+        child: Icon(Icons.pie_chart_outline, color: AppThemes.forest),
+      ),
+      title: Text(plan, style: Theme.of(context).textTheme.titleMedium),
+      subtitle: Text('Invested $amount'),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            profit,
+            style: const TextStyle(
+              color: AppThemes.forest,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (onWithdraw != null)
+            GestureDetector(
+              onTap: onWithdraw,
+              child: const Text(
+                'Withdraw',
+                style: TextStyle(
+                  color: AppThemes.red,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _OfflineBanner extends StatelessWidget {
+  const _OfflineBanner({required this.retry});
+  final VoidCallback retry;
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(bottom: 14),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    decoration: BoxDecoration(
+      color: AppThemes.amber.withAlpha(35),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.cloud_off, size: 18, color: AppThemes.amber),
+        const SizedBox(width: 8),
+        const Expanded(child: Text('Showing cached data')),
+        IconButton(onPressed: retry, icon: const Icon(Icons.refresh)),
+      ],
+    ),
+  );
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.message, required this.retry});
+  final String message;
+  final VoidCallback retry;
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.cloud_off, size: 48),
+          const SizedBox(height: 12),
+          Text(message, textAlign: TextAlign.center),
+          const SizedBox(height: 18),
+          ElevatedButton.icon(
+            onPressed: retry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
