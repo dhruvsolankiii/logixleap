@@ -1,23 +1,21 @@
 import 'package:flutter/material.dart';
-import '../../services/api_service.dart';
-import '../../services/storage_service.dart';
-import '../../services/cache_service.dart';
 import 'package:skeletonizer/skeletonizer.dart';
+import '../../services/api_service.dart';
+import '../../services/cache_service.dart';
+import '../../services/storage_service.dart';
+import '../../services/theme_service.dart';
 
 class InvestmentScreen extends StatefulWidget {
   const InvestmentScreen({super.key});
-
   @override
   State<InvestmentScreen> createState() => _InvestmentScreenState();
 }
 
 class _InvestmentScreenState extends State<InvestmentScreen> {
   List<dynamic> plans = [];
-  bool isLoading = true;
   double virtualBalance = 0;
-  bool isBalanceLoading = true;
+  bool loading = true, offline = false;
   String? errorMessage;
-  bool isOffline = false;
 
   @override
   void initState() {
@@ -26,327 +24,98 @@ class _InvestmentScreenState extends State<InvestmentScreen> {
   }
 
   Future<void> loadData() async {
-    setState(() {
-      isLoading = true;
-      isBalanceLoading = true;
-      errorMessage = null;
-      isOffline = false;
-    });
-
-    try {
-      var plansData = await ApiService.getPlans();
+    if (mounted) {
       setState(() {
-        plans = plansData;
-        isLoading = false;
+        loading = true;
+        errorMessage = null;
+        offline = false;
       });
-
-      // Cache plans data
-      await CacheService.saveCache("plans", plansData);
-
-      String? userId = await StorageService.getUserId();
+    }
+    try {
+      final fetched = await ApiService.getPlans();
+      final userId = await StorageService.getUserId();
+      var balance = 0.0;
       if (userId != null) {
-        var portfolioData = await ApiService.getPortfolio(userId);
-        if (portfolioData["error"] != true) {
-          setState(() {
-            virtualBalance = (portfolioData["virtualBalance"] ?? 0).toDouble();
-            isBalanceLoading = false;
-          });
-          // Cache balance
-          await CacheService.saveCache("balance", virtualBalance);
-        } else {
-          setState(() { isBalanceLoading = false; });
-        }
+        final portfolio = await ApiService.getPortfolio(userId);
+        balance = (portfolio['virtualBalance'] ?? 0).toDouble();
       }
-    } catch (e) {
-      if (mounted) {
-        // Try loading from cache
-        await _loadFromCache();
-      }
+      if (!mounted) return;
+      setState(() {
+        plans = fetched;
+        virtualBalance = balance;
+        loading = false;
+      });
+      await CacheService.saveCache('plans', fetched);
+      await CacheService.saveCache('balance', balance);
+    } catch (_) {
+      await _loadFromCache();
     }
   }
 
   Future<void> _loadFromCache() async {
-    var cachedPlans = await CacheService.getCache("plans");
-    var cachedBalance = await CacheService.getCache("balance");
-
-    if (cachedPlans != null) {
-      setState(() {
+    final cachedPlans = await CacheService.getCache('plans');
+    final cachedBalance = await CacheService.getCache('balance');
+    if (!mounted) return;
+    setState(() {
+      loading = false;
+      if (cachedPlans != null) {
         plans = cachedPlans;
         virtualBalance = (cachedBalance ?? 0).toDouble();
-        isLoading = false;
-        isBalanceLoading = false;
-        isOffline = true;
-      });
-    } else {
-      setState(() {
-        isLoading = false;
-        isBalanceLoading = false;
-        errorMessage = "Unable to connect to server. No cached data available.";
-      });
-    }
+        offline = true;
+      } else {
+        errorMessage = 'Unable to connect to server. No cached data available.';
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text("Investment Plans"),
-        backgroundColor: theme.appBarTheme.backgroundColor,
-        foregroundColor: theme.appBarTheme.foregroundColor,
-        elevation: 0,
-      ),
+      appBar: AppBar(title: const Text('Investment plans')),
       body: errorMessage != null
-          ? Center(
+          ? _ErrorState(message: errorMessage!, onRetry: loadData)
+          : Skeletonizer(
+              enabled: loading,
               child: Padding(
-                padding: const EdgeInsets.all(32),
+                padding: const EdgeInsets.all(24),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.cloud_off, size: 64, color: theme.textTheme.bodyMedium?.color?.withOpacity(0.5)),
-                    const SizedBox(height: 16),
-                    Text(
-                      errorMessage!,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: theme.textTheme.bodyMedium?.color, fontSize: 16),
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      onPressed: loadData,
-                      icon: const Icon(Icons.refresh, color: Colors.white),
-                      label: const Text("Retry", style: TextStyle(color: Colors.white)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1E88E5),
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      ),
+                    if (offline) _OfflineBanner(onRetry: loadData),
+                    _BalanceCard(value: '₹$virtualBalance'),
+                    const SizedBox(height: 24),
+                    Expanded(
+                      child: plans.isEmpty
+                          ? const Center(child: Text('No plans available'))
+                          : ListView.separated(
+                              itemCount: loading ? 3 : plans.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 12),
+                              itemBuilder: (_, index) {
+                                final plan = loading
+                                    ? <String, dynamic>{}
+                                    : plans[index];
+                                return _PlanCard(
+                                  title: plan['title'] ?? 'Loading plan',
+                                  description:
+                                      plan['description'] ??
+                                      'Explore a balanced way to grow your savings.',
+                                  roi: (plan['roi'] ?? 0).toDouble(),
+                                  duration:
+                                      plan['duration'] ?? 'Flexible duration',
+                                  onInvest: () => showInvestDialog(
+                                    context,
+                                    plan['title'] ?? 'Investment',
+                                    (plan['roi'] ?? 0).toDouble(),
+                                    plan['duration'] ?? '',
+                                  ),
+                                );
+                              },
+                            ),
                     ),
                   ],
                 ),
               ),
-            )
-          : isLoading || isBalanceLoading
-              ? Skeletonizer(
-                  enabled: true,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(colors: [Color(0xFF1E88E5), Color(0xFF1565C0)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Column(
-                            children: [
-                              Text("Available Balance", style: TextStyle(color: Colors.white70, fontSize: 16)),
-                              SizedBox(height: 8),
-                              Text("₹0", style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Expanded(
-                          child: ListView.builder(
-                            itemCount: 4,
-                            itemBuilder: (context, index) {
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: buildPlanCard(
-                                  context: context,
-                                  title: "Loading Plan Title",
-                                  description: "Loading description of the plan goes here.",
-                                  roi: 0,
-                                  duration: "0 Months",
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-          : Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  // Offline Banner
-                  if (isOffline)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade800,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.cloud_off, color: Colors.white, size: 18),
-                          const SizedBox(width: 10),
-                          const Expanded(
-                            child: Text(
-                              "Showing cached data - Server offline",
-                              style: TextStyle(color: Colors.white, fontSize: 13),
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: loadData,
-                            child: const Icon(Icons.refresh, color: Colors.white, size: 20),
-                          ),
-                        ],
-                      ),
-                    ),
-                  // Balance Card
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF1E88E5), Color(0xFF1565C0)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 10,
-                          offset: const Offset(0, 5),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        const Text(
-                          "Available Balance",
-                          style: TextStyle(color: Colors.white70, fontSize: 16),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          "₹$virtualBalance",
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  
-                  // Plans List
-                  Expanded(
-                    child: plans.isEmpty
-                        ? Center(child: Text("No plans available", style: TextStyle(color: theme.textTheme.bodyMedium?.color)))
-                        : ListView.builder(
-                            itemCount: plans.length,
-                            itemBuilder: (context, index) {
-                              var plan = plans[index];
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: buildPlanCard(
-                                  context: context,
-                                  title: plan['title'] ?? "",
-                                  description: plan['description'] ?? "",
-                                  roi: (plan['roi'] ?? 0).toDouble(),
-                                  duration: plan['duration'] ?? "",
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
             ),
-    );
-  }
-
-  Widget buildPlanCard({
-    required BuildContext context,
-    required String title,
-    required String description,
-    required double roi,
-    required String duration,
-  }) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: isDark ? [] : [
-          const BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
-        ]
-      ),
-
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 18,
-              color: theme.textTheme.bodyLarge?.color,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          Text(description, style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
-
-          const SizedBox(height: 15),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-
-                children: [
-                  Text(
-                    "$roi% Return",
-                    style: TextStyle(
-                      color: theme.textTheme.bodyLarge?.color,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-
-                  const SizedBox(height: 5),
-
-                  Text(duration, style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
-                ],
-              ),
-
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1E88E5),
-                ),
-
-                onPressed: () {
-                  showInvestDialog(context, title, roi, duration);
-                },
-
-                child: const Text(
-                  "Invest",
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 
@@ -356,163 +125,191 @@ class _InvestmentScreenState extends State<InvestmentScreen> {
     double roi,
     String duration,
   ) {
-    TextEditingController amountController = TextEditingController();
-
+    final controller = TextEditingController();
     showDialog(
       context: context,
-
-      builder: (dialogContext) {
-        final theme = Theme.of(context);
-        return AlertDialog(
-          backgroundColor: theme.cardColor,
-          title: Text(
-            "Invest in $title",
-            style: TextStyle(color: theme.textTheme.bodyLarge?.color),
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Invest in $title'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Amount (₹)'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
           ),
-
-          content: TextField(
-            controller: amountController,
-            keyboardType: TextInputType.number,
-            style: TextStyle(color: theme.textTheme.bodyLarge?.color),
-            decoration: InputDecoration(
-              labelText: "Enter Amount (₹)",
-              labelStyle: TextStyle(color: theme.textTheme.bodyMedium?.color),
-              enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: theme.textTheme.bodyMedium?.color ?? Colors.grey),
-              ),
-              focusedBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: theme.colorScheme.primary),
-              ),
-            ),
-          ),
-
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-              },
-              child: Text(
-                "Cancel",
-                style: TextStyle(color: theme.textTheme.bodyMedium?.color),
-              ),
-            ),
-
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1E88E5),
-              ),
-              onPressed: () async {
-                final String text = amountController.text.trim();
-
-                if (text.isEmpty) {
-                  ScaffoldMessenger.of(dialogContext).showSnackBar(
-                    const SnackBar(
-                      content: Text("Please enter an amount"),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-
-                final double? parsed = double.tryParse(text);
-
-                if (parsed == null || parsed <= 0) {
-                  ScaffoldMessenger.of(dialogContext).showSnackBar(
-                    const SnackBar(
-                      content: Text("Please enter a valid positive amount"),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-
-                String? userId = await StorageService.getUserId();
-
-                var result = await ApiService.invest(
-                  userId!,
-                  title,
-                  parsed,
-                  roi,
-                  duration,
+          ElevatedButton(
+            onPressed: () async {
+              final amount = double.tryParse(controller.text.trim());
+              if (amount == null || amount <= 0) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Enter a valid positive amount'),
+                  ),
                 );
-
-                Navigator.pop(dialogContext);
-
-                showDialog(
-                  context: context,
-
-                  builder: (resultContext) {
-                    final theme = Theme.of(context);
-                    return AlertDialog(
-                      backgroundColor: theme.cardColor,
-                      title: Text(
-                        "Investment Result",
-                        style: TextStyle(color: theme.textTheme.bodyLarge?.color),
-                      ),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            result["message"],
-                            style: TextStyle(color: theme.textTheme.bodyMedium?.color),
-                          ),
-                        if (result["virtualBalance"] != null) ...[
-                          const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: theme.scaffoldBackgroundColor,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  "Remaining Balance:",
-                                  style: TextStyle(color: theme.textTheme.bodyMedium?.color, fontSize: 14),
-                                ),
-                                Text(
-                                  "₹${result["virtualBalance"]}",
-                                  style: const TextStyle(
-                                    color: Color(0xFF4CAF50),
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
+                return;
+              }
+              final userId = await StorageService.getUserId();
+              if (userId == null) return;
+              final result = await ApiService.invest(
+                userId,
+                title,
+                amount,
+                roi,
+                duration,
+              );
+              if (!dialogContext.mounted) return;
+              Navigator.pop(dialogContext);
+              if (!context.mounted) return;
+              showDialog(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: const Text('Investment result'),
+                  content: Text(result['message'] ?? 'Investment completed.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('OK'),
                     ),
-                    actions: [
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: theme.colorScheme.primary,
-                        ),
-                        onPressed: () {
-                          Navigator.pop(resultContext);
-                        },
-                        child: const Text(
-                          "OK",
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
-                    ],
-                  );
-                },
+                  ],
+                ),
               );
             },
-
-              child: const Text(
-                "Confirm",
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        );
-      },
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
     );
   }
+}
+
+class _BalanceCard extends StatelessWidget {
+  const _BalanceCard({required this.value});
+  final String value;
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(24),
+    decoration: BoxDecoration(
+      color: AppThemes.forest,
+      borderRadius: BorderRadius.circular(22),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Available balance',
+          style: TextStyle(color: Colors.white.withAlpha(190)),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 32,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _PlanCard extends StatelessWidget {
+  const _PlanCard({
+    required this.title,
+    required this.description,
+    required this.roi,
+    required this.duration,
+    required this.onInvest,
+  });
+  final String title, description, duration;
+  final double roi;
+  final VoidCallback onInvest;
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 6),
+          Text(description),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$roi% return',
+                      style: const TextStyle(
+                        color: AppThemes.forest,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(duration),
+                  ],
+                ),
+              ),
+              ElevatedButton(onPressed: onInvest, child: const Text('Invest')),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _OfflineBanner extends StatelessWidget {
+  const _OfflineBanner({required this.onRetry});
+  final VoidCallback onRetry;
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(bottom: 14),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    decoration: BoxDecoration(
+      color: AppThemes.amber.withAlpha(35),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.cloud_off, size: 18, color: AppThemes.amber),
+        const SizedBox(width: 8),
+        const Expanded(child: Text('Showing cached data')),
+        IconButton(onPressed: onRetry, icon: const Icon(Icons.refresh)),
+      ],
+    ),
+  );
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.message, required this.onRetry});
+  final String message;
+  final VoidCallback onRetry;
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.cloud_off, size: 48),
+          const SizedBox(height: 12),
+          Text(message, textAlign: TextAlign.center),
+          const SizedBox(height: 18),
+          ElevatedButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
